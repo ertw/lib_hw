@@ -1,0 +1,46 @@
+# clangd language server cache
+.cache/
+
+# Build directories
+/build/
+/build-*/
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+compile_commands.json
+*.cmake
+
+# Ninja
+.ninja_deps
+.ninja_log
+rules.ninja
+
+# Executables / Binaries
+*.elf
+*.bin
+*.uf2
+*.hex
+*.map
+
+# Object files
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+
+# Generated headers from PIO
+*.pio.h
+
+# Logs
+*.log
+
+# macOS
+.DS_Store
+.AppleDouble
+.Spotlight-V100
+.Trashes
+
