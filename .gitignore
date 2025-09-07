@@ -44,3 +44,5 @@ rules.ninja
 .Spotlight-V100
 .Trashes
 
+
+.idea/*
