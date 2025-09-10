@@ -54,12 +54,13 @@ int main() {
     data[0] = 0x00; data[1] = 0x40;
     i2c_write_blocking(i2c1, OLED_ADDR, data, 2, false);
     
-    // Enable charge pump (CRITICAL!)
-    data[0] = 0x00; data[1] = 0xAD;  // DC-DC command
+    // Enable charge pump - SSD1306 style (THIS IS THE KEY!)
+    // This display needs the SSD1306 charge pump commands to work after power cycle
+    data[0] = 0x00; data[1] = 0x8D;  // Charge pump command
     i2c_write_blocking(i2c1, OLED_ADDR, data, 2, false);
-    data[0] = 0x00; data[1] = 0x8B;  // DC-DC ON
+    data[0] = 0x00; data[1] = 0x14;  // Enable charge pump
     i2c_write_blocking(i2c1, OLED_ADDR, data, 2, false);
-    sleep_ms(100);  // Wait for charge pump
+    sleep_ms(100);  // Wait for charge pump to stabilize
     
     // Set segment remap
     data[0] = 0x00; data[1] = 0xA1;
