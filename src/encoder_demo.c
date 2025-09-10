@@ -27,7 +27,7 @@
 // Pin definitions for EC11 encoder (using accessible pins on Wukong2040)
 #define ENCODER_PIN_A    26  // TRA
 #define ENCODER_PIN_B    27  // TRB
-#define ENCODER_PUSH     28  // Push button (unused for now)
+#define ENCODER_PUSH     28  // Push button (active-low)
 
 // OLED pins
 #define OLED_SDA_PIN     6
@@ -41,6 +41,9 @@
 
 // EC11 has 20 detents per revolution; with X4 decoding that's 80 counts per rev
 #define ENCODER_COUNTS_PER_REV 80
+
+// Simple debounce for the push button
+#define BTN_DEBOUNCE_MS 180
 
 // Global variables for encoder state
 static volatile int encoder_position = 0;
@@ -141,9 +144,65 @@ void draw_rotated_square(sh1106_t *display, int cx, int cy, int size, float angl
             true);
     }
     
-    // Draw a small dot at the center
+// Draw a small dot at the center
     sh1106_set_pixel(display, cx, cy, true);
 }
+
+// Draw a rotated isosceles triangle
+static void draw_rotated_triangle(sh1106_t *display, int cx, int cy, int size, float angle) {
+    float half = size / 2.0f;
+    float pts[3][2] = {
+        { 0.0f, -half}, // top
+        {-half,  half}, // bottom-left
+        { half,  half}  // bottom-right
+    };
+    int r[3][2];
+    float c = cosf(angle), s = sinf(angle);
+    for (int i = 0; i < 3; i++) {
+        float x = pts[i][0], y = pts[i][1];
+        r[i][0] = (int)(cx + x * c - y * s);
+        r[i][1] = (int)(cy + x * s + y * c);
+    }
+    sh1106_draw_line(display, r[0][0], r[0][1], r[1][0], r[1][1], true);
+    sh1106_draw_line(display, r[1][0], r[1][1], r[2][0], r[2][1], true);
+    sh1106_draw_line(display, r[2][0], r[2][1], r[0][0], r[0][1], true);
+}
+
+// Midpoint circle (outline)
+static void draw_circle_outline(sh1106_t *display, int cx, int cy, int rr) {
+    int x = rr, y = 0; int err = 0;
+    while (x >= y) {
+        sh1106_set_pixel(display, cx + x, cy + y, true);
+        sh1106_set_pixel(display, cx + y, cy + x, true);
+        sh1106_set_pixel(display, cx - y, cy + x, true);
+        sh1106_set_pixel(display, cx - x, cy + y, true);
+        sh1106_set_pixel(display, cx - x, cy - y, true);
+        sh1106_set_pixel(display, cx - y, cy - x, true);
+        sh1106_set_pixel(display, cx + y, cy - x, true);
+        sh1106_set_pixel(display, cx + x, cy - y, true);
+        y++;
+        if (err <= 0) { err += 2*y + 1; }
+        else { x--; err += 2*(y - x) + 1; }
+    }
+}
+
+// Circle with rotating cross
+static void draw_circle_with_cross(sh1106_t *display, int cx, int cy, int size, float angle) {
+    int r = (int)(size / 2.0f);
+    draw_circle_outline(display, cx, cy, r);
+    float c = cosf(angle), s = sinf(angle);
+    // first line
+    int x1 = (int)(cx + r * c), y1 = (int)(cy + r * s);
+    int x2 = (int)(cx - r * c), y2 = (int)(cy - r * s);
+    sh1106_draw_line(display, x1, y1, x2, y2, true);
+    // second line (perpendicular)
+    float c2 = cosf(angle + (float)M_PI/2.0f), s2 = sinf(angle + (float)M_PI/2.0f);
+    int x3 = (int)(cx + r * c2), y3 = (int)(cy + r * s2);
+    int x4 = (int)(cx - r * c2), y4 = (int)(cy - r * s2);
+    sh1106_draw_line(display, x3, y3, x4, y4, true);
+}
+
+typedef enum { SHAPE_SQUARE = 0, SHAPE_TRIANGLE = 1, SHAPE_CIRCLE_X = 2 } shape_t;
 
 int main() {
     stdio_init_all();
@@ -170,27 +229,54 @@ int main() {
     }
     printf("OLED initialized\n");
     
-    // Main loop
+// Main loop
     int last_position = -1;
     char status[32];
+    shape_t shape = SHAPE_SQUARE;       // current shape
+    shape_t last_shape = (shape_t)-1;   // force first draw
+
+    // Button state for debounce (active-low input)
+    bool last_btn = true; // pulled-up -> idle high
+    absolute_time_t last_press = get_absolute_time();
     
     while (true) {
-        // Check if encoder position has changed
+        // Handle push button press to cycle shapes
+        bool btn_now = gpio_get(ENCODER_PUSH);
+        if (!btn_now && last_btn) { // falling edge
+            if (absolute_time_diff_us(last_press, get_absolute_time()) > BTN_DEBOUNCE_MS * 1000) {
+                shape = (shape_t)((shape + 1) % 3);
+                last_press = get_absolute_time();
+            }
+        }
+        last_btn = btn_now;
+
+        // Check if encoder position or shape has changed
         int current_position = encoder_position;
         
-        if (current_position != last_position) {
+        if (current_position != last_position || shape != last_shape) {
             // Clear display buffer
             sh1106_clear(&display);
             
             // Calculate rotation angle (map 0-79 to 0-2π)
             float angle = (current_position * 2.0f * M_PI) / ENCODER_COUNTS_PER_REV;
             
-            // Draw the rotated square
-            draw_rotated_square(&display, CENTER_X, CENTER_Y, SQUARE_SIZE, angle);
+            // Draw the selected shape
+            switch (shape) {
+                case SHAPE_SQUARE:
+                    draw_rotated_square(&display, CENTER_X, CENTER_Y, SQUARE_SIZE, angle);
+                    break;
+                case SHAPE_TRIANGLE:
+                    draw_rotated_triangle(&display, CENTER_X, CENTER_Y, SQUARE_SIZE, angle);
+                    break;
+                case SHAPE_CIRCLE_X:
+                    draw_circle_with_cross(&display, CENTER_X, CENTER_Y, SQUARE_SIZE, angle);
+                    break;
+            }
             
-            // Draw position indicator at top
-            snprintf(status, sizeof(status), "Count: %02d/%d", 
-                     current_position, ENCODER_COUNTS_PER_REV);
+            // Draw position/shape indicator at top
+            const char *shape_name = (shape == SHAPE_SQUARE) ? "Square" :
+                                     (shape == SHAPE_TRIANGLE) ? "Triangle" : "Circle+Cross";
+            snprintf(status, sizeof(status), "%s | %02d/%d", shape_name, current_position, ENCODER_COUNTS_PER_REV);
             sh1106_draw_string(&display, 0, 0, status);
             
             // Draw angle at bottom
@@ -202,9 +288,10 @@ int main() {
             sh1106_update(&display);
             
             // Print to serial for debugging
-            printf("Position: %d, Angle: %d degrees\n", current_position, degrees);
+            printf("Shape:%d Position:%d Angle:%d deg\n", (int)shape, current_position, degrees);
             
             last_position = current_position;
+            last_shape = shape;
         }
         
         // Small delay to reduce CPU usage
