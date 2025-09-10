@@ -23,6 +23,8 @@ make debug              # Debug build
 make reconfigure        # Force CMake reconfiguration
 ```
 
+**IMPORTANT**: After modifying CMakeLists.txt, you MUST run `make reconfigure` before `make build`. The build system does not automatically detect CMake changes, so running only `make build` will use the old configuration.
+
 ### Flashing to Device
 ```bash
 make flash              # Auto-detect and copy to BOOTSEL volume (RPI-RP2350/RPI-RP2)
@@ -50,18 +52,22 @@ make serial             # Connect to Pico serial port with minicom
 ### Main Application
 The `src/main.c` file contains the primary application logic. Pin assignments and configuration constants are defined at the top of the source file for easy modification during experimentation.
 
-## Hardware Components Interfaced
+## Available Demos
 
-### 28BYJ-48 Stepper Motor
-- 5V geared stepper motor with 2048 steps per revolution
-- Controlled via ULN2003 driver board (Darlington transistor array)
-- Implemented using half-stepping sequence (8 steps) for smooth rotation
-- Features automatic coil de-energization for power saving
+### 1. Stepper Motor Demo (`steppydemo.uf2`)
+Controls a 28BYJ-48 stepper motor with push buttons.
+- **Motor**: 28BYJ-48 5V stepper with ULN2003 driver
+- **Control**: Push buttons on GP18 (CW) and GP19 (CCW)
+- **Features**: Half-stepping, automatic coil de-energization
 
-### Push Buttons
-- Tactile switches for user input
-- Configured with internal pull-up resistors (active-low logic)
-- Used for directional control and other inputs
+### 2. OLED Display Demo (`oled_demo.uf2`)
+Demonstrates SH1106 1.3" OLED display capabilities.
+- **Display**: 128x64 pixels, I2C interface at address 0x3C
+- **Wiring**: SDA→GP6, SCL→GP7, VCC→5V (VBUS), GND→GND
+- **Features**: Text rendering, graphics primitives, animations
+- **Note**: Must use i2c1 (not i2c0) for GP6/GP7 pins
+
+See `OLED_README.md` for detailed OLED setup instructions.
 
 ### Control Techniques Demonstrated
 - **Half-stepping**: 8-step sequence for improved smoothness and torque
