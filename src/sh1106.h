@@ -15,6 +15,9 @@
 #endif
 
 // SH1106 Commands
+// NOTE: Despite being labeled as SH1106, some modules require SSD1306-style
+// charge pump commands (0x8D/0x14) for proper power-on initialization.
+// This driver uses SSD1306 charge pump commands for maximum compatibility.
 #define SH1106_CMD_SET_COLUMN_ADDR_LOW   0x00
 #define SH1106_CMD_SET_COLUMN_ADDR_HIGH  0x10
 #define SH1106_CMD_SET_PUMP_VOLTAGE      0x30
@@ -26,7 +29,7 @@
 #define SH1106_CMD_SET_NORMAL_DISPLAY    0xA6
 #define SH1106_CMD_SET_INVERT_DISPLAY    0xA7
 #define SH1106_CMD_SET_MULTIPLEX         0xA8
-#define SH1106_CMD_SET_DCDC              0xAD
+#define SH1106_CMD_SET_DCDC              0xAD  // SH1106 DC-DC command (not used)
 #define SH1106_CMD_DISPLAY_OFF           0xAE
 #define SH1106_CMD_DISPLAY_ON            0xAF
 #define SH1106_CMD_SET_PAGE_ADDR         0xB0
@@ -37,6 +40,11 @@
 #define SH1106_CMD_SET_COM_PINS          0xDA
 #define SH1106_CMD_SET_VCOM_DESELECT     0xDB
 #define SH1106_CMD_NOP                   0xE3
+
+// SSD1306 charge pump commands (used for compatibility)
+#define SSD1306_CMD_CHARGE_PUMP         0x8D
+#define SSD1306_CHARGE_PUMP_ENABLE      0x14
+#define SSD1306_CHARGE_PUMP_DISABLE     0x10
 
 // Control bytes
 #define SH1106_CTRL_CMD_SINGLE  0x80

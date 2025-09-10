@@ -13,7 +13,7 @@ pico_enable_stdio_uart(steppydemo 0)
 target_link_libraries(steppydemo pico_stdlib)
 pico_add_extra_outputs(steppydemo)
 
-# OLED Demo executable
+# OLED Demo executable with SH1106 driver
 add_executable(oled_demo src/oled_demo.c src/sh1106.c)
 pico_enable_stdio_usb(oled_demo 1)
 pico_enable_stdio_uart(oled_demo 0)
@@ -22,12 +22,3 @@ target_link_libraries(oled_demo
     hardware_i2c
 )
 pico_add_extra_outputs(oled_demo)
-# OLED working - minimal verified code
-add_executable(oled_working src/oled_working.c)
-pico_enable_stdio_usb(oled_working 1)
-pico_enable_stdio_uart(oled_working 0)
-target_link_libraries(oled_working 
-    pico_stdlib 
-    hardware_i2c
-)
-pico_add_extra_outputs(oled_working)

@@ -10,6 +10,7 @@ Successfully configured and tested 1.3" OLED display with SH1106 controller.
 - **Address**: 0x3C
 - **Size**: 1.3 inch
 - **Power**: Requires 5V (has onboard voltage regulator)
+- **Note**: Some SH1106 modules require SSD1306-style charge pump commands
 
 ### Wiring (Pico 2 W)
 | OLED Pin | Pico Pin | Description |
@@ -25,9 +26,10 @@ Successfully configured and tested 1.3" OLED display with SH1106 controller.
 
 ### Key Learnings
 1. **I2C Controller**: Must use `i2c1` for GP6/GP7 pins (not i2c0)
-2. **Charge Pump**: Critical to enable DC-DC converter early in initialization
+2. **Charge Pump**: Despite being labeled SH1106, this module requires SSD1306-style charge pump commands (0x8D followed by 0x14) for reliable power-on initialization. The standard SH1106 commands (0xAD/0x8B) do not survive power cycles.
 3. **Control Bytes**: Uses 0x00 for commands, 0x40 for data
 4. **Column Offset**: SH1106 has 132 columns, display shows 128 (offset of 2)
+5. **Power Requirements**: Must use 5V from VBUS pin (pin 40), not 3.3V
 
 ### Building
 ```bash
@@ -63,10 +65,11 @@ The `oled_demo` executable demonstrates:
 ## Troubleshooting
 
 If the display doesn't work:
-1. Verify 5V power connection (not 3.3V)
-2. Check I2C address with scanner (should be 0x3C)
-3. Ensure using i2c1 for GP6/GP7 pins
-4. Verify charge pump is enabled in initialization
+1. **Power**: Verify 5V power connection from VBUS (pin 40), not 3.3V
+2. **I2C Address**: Check I2C address with scanner (should be 0x3C)
+3. **I2C Controller**: Ensure using i2c1 for GP6/GP7 pins (not i2c0)
+4. **Charge Pump**: The driver uses SSD1306-style charge pump commands (0x8D/0x14) which are required for this module to work after power cycling
+5. **Wiring**: Double-check all connections - intermittent failures often indicate loose connections
 
 ## API Reference
 

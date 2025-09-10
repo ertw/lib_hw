@@ -131,64 +131,68 @@ bool sh1106_init(sh1106_t *display, i2c_inst_t *i2c, uint8_t addr, uint8_t sda_p
         return false;  // Device not found
     }
     
-    // Initialize display - use working sequence from test
+    // Initialize display with correct command sequence
+    // IMPORTANT: This display requires SSD1306-style charge pump commands (0x8D/0x14)
+    // even though it's labeled as SH1106. This is critical for power-on reliability.
+    
     // Display off
     uint8_t cmd_off[2] = {0x00, 0xAE};
     i2c_write_blocking(display->i2c, display->addr, cmd_off, 2, false);
     sleep_ms(10);
     
-    // Set display clock
+    // Set display clock divide ratio/oscillator frequency
     uint8_t clock[3] = {0x00, 0xD5, 0x80};
     i2c_write_blocking(display->i2c, display->addr, clock, 3, false);
     
-    // Set multiplex
-    uint8_t mux[3] = {0x00, 0xA8, 0x3F};
+    // Set multiplex ratio (1 to 64)
+    uint8_t mux[3] = {0x00, 0xA8, 0x3F};  // 64 lines
     i2c_write_blocking(display->i2c, display->addr, mux, 3, false);
     
     // Set display offset
     uint8_t offset[3] = {0x00, 0xD3, 0x00};
     i2c_write_blocking(display->i2c, display->addr, offset, 3, false);
     
-    // Set start line
+    // Set start line address
     uint8_t startline[2] = {0x00, 0x40};
     i2c_write_blocking(display->i2c, display->addr, startline, 2, false);
     
-    // CRITICAL: Enable charge pump
-    uint8_t dcdc1[2] = {0x00, 0xAD};
-    i2c_write_blocking(display->i2c, display->addr, dcdc1, 2, false);
-    uint8_t dcdc2[2] = {0x00, 0x8B};
-    i2c_write_blocking(display->i2c, display->addr, dcdc2, 2, false);
-    sleep_ms(100);
+    // CRITICAL: Enable charge pump using SSD1306 commands
+    // This module requires these specific commands to work after power cycle
+    uint8_t pump_cmd[2] = {0x00, 0x8D};  // Charge pump command
+    i2c_write_blocking(display->i2c, display->addr, pump_cmd, 2, false);
+    uint8_t pump_enable[2] = {0x00, 0x14};  // Enable charge pump
+    i2c_write_blocking(display->i2c, display->addr, pump_enable, 2, false);
+    sleep_ms(100);  // Wait for charge pump to stabilize
     
-    // Set segment remap
+    // Set segment remap (column address 127 mapped to SEG0)
     uint8_t remap[2] = {0x00, 0xA1};
     i2c_write_blocking(display->i2c, display->addr, remap, 2, false);
     
-    // Set COM scan
+    // Set COM output scan direction (remapped mode)
     uint8_t comscan[2] = {0x00, 0xC8};
     i2c_write_blocking(display->i2c, display->addr, comscan, 2, false);
     
-    // Set COM pins
+    // Set COM pins hardware configuration
     uint8_t compins[3] = {0x00, 0xDA, 0x12};
     i2c_write_blocking(display->i2c, display->addr, compins, 3, false);
     
-    // Set contrast
-    uint8_t contrast[3] = {0x00, 0x81, 0xFF};
+    // Set contrast control
+    uint8_t contrast[3] = {0x00, 0x81, 0xFF};  // Maximum contrast
     i2c_write_blocking(display->i2c, display->addr, contrast, 3, false);
     
-    // Set precharge
+    // Set pre-charge period
     uint8_t precharge[3] = {0x00, 0xD9, 0xF1};
     i2c_write_blocking(display->i2c, display->addr, precharge, 3, false);
     
-    // Set VCOMH
+    // Set VCOMH deselect level
     uint8_t vcomh[3] = {0x00, 0xDB, 0x40};
     i2c_write_blocking(display->i2c, display->addr, vcomh, 3, false);
     
-    // Resume from RAM
+    // Display RAM content (resume from RAM)
     uint8_t resume[2] = {0x00, 0xA4};
     i2c_write_blocking(display->i2c, display->addr, resume, 2, false);
     
-    // Normal display
+    // Normal display mode (not inverted)
     uint8_t normal[2] = {0x00, 0xA6};
     i2c_write_blocking(display->i2c, display->addr, normal, 2, false);
     
