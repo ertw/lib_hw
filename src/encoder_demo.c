@@ -1,28 +1,27 @@
 /**
- * EC11 Rotary Encoder Demo with OLED Display
+ * @file encoder_demo.c
+ * @brief EC11 Rotary Encoder Demo with OLED Display using hardware library
  * 
- * Uses an EC11 rotary encoder to control the rotation of a square
- * displayed on the SH1106 OLED.
+ * Uses an EC11 rotary encoder to control the rotation of shapes
+ * displayed on the SH1106 OLED. Push button cycles through shapes.
  * 
  * Encoder connections (using Wukong2040 breakout board):
  * - ENCODER_TRA -> GP26 (Channel A)
  * - ENCODER_TRB -> GP27 (Channel B) 
- * - ENCODER_PUSH -> GP28 (Push button - unused for now)
+ * - ENCODER_PUSH -> GP28 (Push button - cycles shapes)
  * - GND -> GND
  * - VCC -> 3.3V
  * 
- * OLED connections (as before):
+ * OLED connections:
  * - SDA -> GP6 (I2C1)
  * - SCL -> GP7 (I2C1)
  * - VCC -> VBUS (5V)
  * - GND -> GND
  */
 
+#include "lib.h"
 #include <stdio.h>
 #include <math.h>
-#include "pico/stdlib.h"
-#include "hardware/gpio.h"
-#include "sh1106.h"
 
 // Pin definitions for EC11 encoder (using accessible pins on Wukong2040)
 #define ENCODER_PIN_A    26  // TRA
@@ -34,83 +33,38 @@
 #define OLED_SCL_PIN     7
 #define OLED_ADDR        0x3C
 
-// Square properties
-#define SQUARE_SIZE      20  // Size of the square
+// Shape properties
+#define SHAPE_SIZE       20  // Size of the shapes
 #define CENTER_X         64  // Center of 128 pixel wide display
 #define CENTER_Y         32  // Center of 64 pixel high display
 
 // EC11 has 20 detents per revolution; with X4 decoding that's 80 counts per rev
 #define ENCODER_COUNTS_PER_REV 80
 
-// Simple debounce for the push button
-#define BTN_DEBOUNCE_MS 180
+// Shape types
+typedef enum { 
+    SHAPE_SQUARE = 0, 
+    SHAPE_TRIANGLE = 1, 
+    SHAPE_CIRCLE_X = 2,
+    SHAPE_COUNT = 3
+} shape_t;
 
-// Global variables for encoder state
-static volatile int encoder_position = 0;
-static volatile uint8_t last_encoder_state = 0;
+// Global variables
+static encoder_ec11_t encoder;
+static shape_t current_shape = SHAPE_SQUARE;
+static bool shape_changed = false;
 
-// Interrupt handler for encoder
-void encoder_callback(uint gpio, uint32_t events) {
-    // Read current state of both pins
-    uint8_t pin_a = gpio_get(ENCODER_PIN_A);
-    uint8_t pin_b = gpio_get(ENCODER_PIN_B);
-    uint8_t current_state = (pin_a << 1) | pin_b;
-    
-    // Gray code state machine for quadrature decoding
-    // This determines direction based on state transitions
-    static const int8_t encoder_table[] = {
-         0, -1,  1,  0,
-         1,  0,  0, -1,
-        -1,  0,  0,  1,
-         0,  1, -1,  0
-    };
-    
-    uint8_t index = (last_encoder_state << 2) | current_state;
-    int8_t direction = encoder_table[index];
-    
-    if (direction != 0) {
-        encoder_position += direction;
-        
-        // Wrap around at full rotation (80 counts per rev with X4 decoding)
-        if (encoder_position >= ENCODER_COUNTS_PER_REV) {
-            encoder_position = 0;
-        } else if (encoder_position < 0) {
-            encoder_position = ENCODER_COUNTS_PER_REV - 1;
-        }
+// Encoder event callback
+void encoder_event_handler(encoder_event_t event, int32_t position) {
+    if (event == ENCODER_EVENT_BUTTON_PRESS) {
+        // Cycle through shapes on button press
+        current_shape = (shape_t)((current_shape + 1) % SHAPE_COUNT);
+        shape_changed = true;
     }
-    
-    last_encoder_state = current_state;
-}
-
-// Initialize encoder pins and interrupts
-void encoder_init(void) {
-    // Initialize encoder pins with pull-ups
-    gpio_init(ENCODER_PIN_A);
-    gpio_init(ENCODER_PIN_B);
-    gpio_init(ENCODER_PUSH);
-    
-    gpio_set_dir(ENCODER_PIN_A, GPIO_IN);
-    gpio_set_dir(ENCODER_PIN_B, GPIO_IN);
-    gpio_set_dir(ENCODER_PUSH, GPIO_IN);
-    
-    gpio_pull_up(ENCODER_PIN_A);
-    gpio_pull_up(ENCODER_PIN_B);
-    gpio_pull_up(ENCODER_PUSH);
-    
-    // Read initial state
-    last_encoder_state = (gpio_get(ENCODER_PIN_A) << 1) | gpio_get(ENCODER_PIN_B);
-    
-    // Enable interrupts on both encoder pins for any edge
-    gpio_set_irq_enabled_with_callback(ENCODER_PIN_A, 
-        GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, 
-        true, &encoder_callback);
-    gpio_set_irq_enabled(ENCODER_PIN_B, 
-        GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, 
-        true);
 }
 
 // Draw a rotated square
-void draw_rotated_square(sh1106_t *display, int cx, int cy, int size, float angle) {
+static void draw_rotated_square(sh1106_t *display, int cx, int cy, int size, float angle) {
     // Calculate half size for convenience
     float half = size / 2.0f;
     
@@ -202,21 +156,43 @@ static void draw_circle_with_cross(sh1106_t *display, int cx, int cy, int size, 
     sh1106_draw_line(display, x3, y3, x4, y4, true);
 }
 
-typedef enum { SHAPE_SQUARE = 0, SHAPE_TRIANGLE = 1, SHAPE_CIRCLE_X = 2 } shape_t;
-
 int main() {
     stdio_init_all();
     
     // Wait a bit for USB serial to connect (optional)
     sleep_ms(2000);
     
-    printf("EC11 Rotary Encoder Demo on Wukong2040\n");
-    printf("Rotate encoder to spin the square\n");
+    printf("EC11 Rotary Encoder Demo on Wukong2040 (using hardware library)\n");
+    printf("Rotate encoder to spin shapes\n");
+    printf("Press encoder button to cycle through shapes\n");
     printf("Encoder pins: A=GP%d, B=GP%d, Push=GP%d\n", 
            ENCODER_PIN_A, ENCODER_PIN_B, ENCODER_PUSH);
     
-    // Initialize encoder
-    encoder_init();
+    // Configure and initialize encoder
+    encoder_config_t encoder_config = {
+        .pin_a = ENCODER_PIN_A,
+        .pin_b = ENCODER_PIN_B,
+        .pin_button = ENCODER_PUSH,
+        .invert_direction = false,
+        .debounce_us = 1000,
+        .button_debounce_us = 50000,
+        .pull_up = true
+    };
+    
+    if (encoder_ec11_init(&encoder, &encoder_config) != HW_OK) {
+        printf("Failed to initialize encoder!\n");
+        return -1;
+    }
+    
+    // Set encoder limits for one full rotation
+    encoder_ec11_set_limits(&encoder, 0, ENCODER_COUNTS_PER_REV - 1, true);
+    
+    // Set callback for button events
+    encoder_ec11_set_callback(&encoder, encoder_event_handler);
+    
+    // Enable interrupts for encoder
+    encoder_ec11_enable_interrupts(&encoder);
+    
     printf("Encoder initialized\n");
     
     // Initialize OLED display
@@ -229,31 +205,16 @@ int main() {
     }
     printf("OLED initialized\n");
     
-// Main loop
+    // Main loop
     int last_position = -1;
     char status[32];
-    shape_t shape = SHAPE_SQUARE;       // current shape
-    shape_t last_shape = (shape_t)-1;   // force first draw
-
-    // Button state for debounce (active-low input)
-    bool last_btn = true; // pulled-up -> idle high
-    absolute_time_t last_press = get_absolute_time();
     
     while (true) {
-        // Handle push button press to cycle shapes
-        bool btn_now = gpio_get(ENCODER_PUSH);
-        if (!btn_now && last_btn) { // falling edge
-            if (absolute_time_diff_us(last_press, get_absolute_time()) > BTN_DEBOUNCE_MS * 1000) {
-                shape = (shape_t)((shape + 1) % 3);
-                last_press = get_absolute_time();
-            }
-        }
-        last_btn = btn_now;
-
-        // Check if encoder position or shape has changed
-        int current_position = encoder_position;
+        // Get current encoder position
+        int current_position = encoder_ec11_get_position(&encoder);
         
-        if (current_position != last_position || shape != last_shape) {
+        // Check if encoder position or shape has changed
+        if (current_position != last_position || shape_changed) {
             // Clear display buffer
             sh1106_clear(&display);
             
@@ -261,21 +222,21 @@ int main() {
             float angle = (current_position * 2.0f * M_PI) / ENCODER_COUNTS_PER_REV;
             
             // Draw the selected shape
-            switch (shape) {
+            switch (current_shape) {
                 case SHAPE_SQUARE:
-                    draw_rotated_square(&display, CENTER_X, CENTER_Y, SQUARE_SIZE, angle);
+                    draw_rotated_square(&display, CENTER_X, CENTER_Y, SHAPE_SIZE, angle);
                     break;
                 case SHAPE_TRIANGLE:
-                    draw_rotated_triangle(&display, CENTER_X, CENTER_Y, SQUARE_SIZE, angle);
+                    draw_rotated_triangle(&display, CENTER_X, CENTER_Y, SHAPE_SIZE, angle);
                     break;
                 case SHAPE_CIRCLE_X:
-                    draw_circle_with_cross(&display, CENTER_X, CENTER_Y, SQUARE_SIZE, angle);
+                    draw_circle_with_cross(&display, CENTER_X, CENTER_Y, SHAPE_SIZE, angle);
                     break;
             }
             
             // Draw position/shape indicator at top
-            const char *shape_name = (shape == SHAPE_SQUARE) ? "Square" :
-                                     (shape == SHAPE_TRIANGLE) ? "Triangle" : "Circle+Cross";
+            const char *shape_name = (current_shape == SHAPE_SQUARE) ? "Square" :
+                                     (current_shape == SHAPE_TRIANGLE) ? "Triangle" : "Circle+Cross";
             snprintf(status, sizeof(status), "%s | %02d/%d", shape_name, current_position, ENCODER_COUNTS_PER_REV);
             sh1106_draw_string(&display, 0, 0, status);
             
@@ -288,10 +249,10 @@ int main() {
             sh1106_update(&display);
             
             // Print to serial for debugging
-            printf("Shape:%d Position:%d Angle:%d deg\n", (int)shape, current_position, degrees);
+            printf("Shape:%d Position:%d Angle:%d deg\n", (int)current_shape, current_position, degrees);
             
             last_position = current_position;
-            last_shape = shape;
+            shape_changed = false;
         }
         
         // Small delay to reduce CPU usage

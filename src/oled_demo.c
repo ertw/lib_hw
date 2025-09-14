@@ -1,6 +1,12 @@
-#include "pico/stdlib.h"
-#include "hardware/i2c.h"
-#include "sh1106.h"
+/**
+ * @file oled_demo.c
+ * @brief OLED display demo using the hardware library
+ * 
+ * Demonstrates SH1106 OLED display capabilities including text,
+ * graphics primitives, and animations.
+ */
+
+#include "lib.h"
 #include <stdio.h>
 #include <math.h>
 

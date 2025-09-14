@@ -1,8 +1,7 @@
 #ifndef SH1106_H
 #define SH1106_H
 
-#include "pico/stdlib.h"
-#include "hardware/i2c.h"
+#include "../lib.h"
 
 // Display dimensions
 #define SH1106_WIDTH 128

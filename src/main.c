@@ -1,93 +1,71 @@
+/**
+ * @file main.c
+ * @brief Stepper motor demo using the hardware library
+ * 
+ * Controls a 28BYJ-48 stepper motor with push buttons.
+ */
 
-#include "pico/stdlib.h"
+#include "lib.h"
 #include <stdio.h>
 
-#ifndef PIN_IN1
+// Motor pins (connected to ULN2003 driver)
 #define PIN_IN1 2
-#endif
-#ifndef PIN_IN2
 #define PIN_IN2 3
-#endif
-#ifndef PIN_IN3
 #define PIN_IN3 4
-#endif
-#ifndef PIN_IN4
 #define PIN_IN4 5
-#endif
 
 // Button pins
 #define BUTTON_CW 18   // Button for clockwise rotation
 #define BUTTON_CCW 19  // Button for counter-clockwise rotation
 
-static const uint8_t HALFSTEP[8] = {
-    0b0001, 0b0011, 0b0010, 0b0110, 0b0100, 0b1100, 0b1000, 0b1001
-};
-
-#ifndef STEP_US
-#define STEP_US 2500
-#endif
-
-static inline void drive_mask(uint8_t m) {
-    gpio_put(PIN_IN1, m & 0x1);
-    gpio_put(PIN_IN2, (m >> 1) & 0x1);
-    gpio_put(PIN_IN3, (m >> 2) & 0x1);
-    gpio_put(PIN_IN4, (m >> 3) & 0x1);
-}
-
-static void coils_off(void) { drive_mask(0); }
-
 int main() {
     stdio_init_all();
     
-    // Initialize motor control pins
-    const uint8_t pins[4] = {PIN_IN1, PIN_IN2, PIN_IN3, PIN_IN4};
-    for (int i = 0; i < 4; ++i) {
-        gpio_init(pins[i]);
-        gpio_set_dir(pins[i], GPIO_OUT);
-        gpio_put(pins[i], 0);
+    // Configure stepper motor
+    stepper_config_t motor_config = {
+        .in1_pin = PIN_IN1,
+        .in2_pin = PIN_IN2,
+        .in3_pin = PIN_IN3,
+        .in4_pin = PIN_IN4,
+        .mode = STEPPER_MODE_HALF_STEP,
+        .step_delay_us = 2500
+    };
+    
+    stepper_28byj48_t motor;
+    if (stepper_28byj48_init(&motor, &motor_config) != HW_OK) {
+        printf("Failed to initialize stepper motor\n");
+        return -1;
     }
     
     // Initialize button pins with pull-up resistors
-    gpio_init(BUTTON_CW);
-    gpio_set_dir(BUTTON_CW, GPIO_IN);
-    gpio_pull_up(BUTTON_CW);
+    hw_gpio_init_input_pullup(BUTTON_CW);
+    hw_gpio_init_input_pullup(BUTTON_CCW);
     
-    gpio_init(BUTTON_CCW);
-    gpio_set_dir(BUTTON_CCW, GPIO_IN);
-    gpio_pull_up(BUTTON_CCW);
-    
-    int idx = 0;
-    absolute_time_t next_step = get_absolute_time();
-    
-    printf("Stepper Motor Control\n");
-    printf("Press button on GP18 for clockwise rotation\n");
-    printf("Press button on GP19 for counter-clockwise rotation\n");
+    printf("Stepper Motor Control (using hardware library)\n");
+    printf("Press button on GP%d for clockwise rotation\n", BUTTON_CW);
+    printf("Press button on GP%d for counter-clockwise rotation\n", BUTTON_CCW);
+    printf("Both buttons: Stop\n");
     
     while (true) {
-        // Check if it's time for the next step
-        if (time_reached(next_step)) {
-            // Read button states (buttons are active low with pull-up)
-            bool cw_pressed = !gpio_get(BUTTON_CW);
-            bool ccw_pressed = !gpio_get(BUTTON_CCW);
-            
-            if (cw_pressed && !ccw_pressed) {
-                // Clockwise rotation
-                idx = (idx + 1) & 7;
-                drive_mask(HALFSTEP[idx]);
-                next_step = make_timeout_time_us(STEP_US);
-            } else if (ccw_pressed && !cw_pressed) {
-                // Counter-clockwise rotation
-                idx = (idx + 7) & 7;  // +7 is same as -1 in modulo 8
-                drive_mask(HALFSTEP[idx]);
-                next_step = make_timeout_time_us(STEP_US);
-            } else {
-                // No button pressed or both pressed - turn off coils to save power
-                coils_off();
-                next_step = make_timeout_time_us(STEP_US);
-            }
+        // Read button states (buttons are active low with pull-up)
+        bool cw_pressed = !gpio_get(BUTTON_CW);
+        bool ccw_pressed = !gpio_get(BUTTON_CCW);
+        
+        if (cw_pressed && !ccw_pressed) {
+            // Clockwise rotation
+            stepper_28byj48_run(&motor, DIR_CW);
+        } else if (ccw_pressed && !cw_pressed) {
+            // Counter-clockwise rotation
+            stepper_28byj48_run(&motor, DIR_CCW);
+        } else {
+            // No button pressed or both pressed - stop motor
+            stepper_28byj48_stop(&motor, false);  // Don't hold position
         }
         
+        // Step the motor if it's running
+        stepper_28byj48_step_if_ready(&motor);
+        
         // Small delay to prevent busy-waiting
-        sleep_us(100);
+        hw_sleep_us(100);
     }
 }
