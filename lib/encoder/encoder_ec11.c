@@ -41,14 +41,15 @@ static encoder_ec11_t* find_encoder_by_pin(uint gpio) {
 static void update_position(encoder_ec11_t *encoder, encoder_state_t new_state) {
     // State transition table for quadrature decoding
     // Each transition can be CW (+1), CCW (-1), or invalid (0)
+    // CW sequence: 00→01→11→10→00 (should increment)
+    // CCW sequence: 00→10→11→01→00 (should decrement)
     static const int8_t state_table[4][4] = {
         //         to: 00  01  10  11
-        /* from 00 */ { 0, +1, -1,  0},
-        /* from 01 */ {-1,  0,  0, +1},
-        /* from 10 */ {+1,  0,  0, -1},
-        /* from 11 */ { 0, -1, +1,  0}
+        /* from 00 */ { 0, -1, +1,  0},  // 00→01=CCW, 00→10=CW
+        /* from 01 */ {+1,  0,  0, -1},  // 01→00=CW, 01→11=CCW
+        /* from 10 */ {-1,  0,  0, +1},  // 10→00=CCW, 10→11=CW  
+        /* from 11 */ { 0, +1, -1,  0}   // 11→01=CW, 11→10=CCW
     };
-    
     int8_t delta = state_table[encoder->state][new_state];
     
     if (delta != 0) {
@@ -58,18 +59,26 @@ static void update_position(encoder_ec11_t *encoder, encoder_state_t new_state) 
         
         encoder->position += delta;
         
-        // Apply limits if set
-        if (encoder->max_pos > 0 && encoder->position > encoder->max_pos) {
-            if (encoder->wrap_around) {
-                encoder->position = encoder->min_pos;
-            } else {
-                encoder->position = encoder->max_pos;
-            }
-        } else if (encoder->min_pos > 0 && encoder->position < encoder->min_pos) {
-            if (encoder->wrap_around) {
-                encoder->position = encoder->max_pos;
-            } else {
-                encoder->position = encoder->min_pos;
+        // Debug output (remove in production)
+        #ifdef ENCODER_DEBUG
+        printf("Encoder: %d->%d, delta=%d, pos=%ld\n", 
+               encoder->state, new_state, delta, encoder->position);
+        #endif
+        
+        // Apply limits if set (max_pos of 0 means no limits)
+        if (encoder->max_pos > encoder->min_pos) {
+            if (encoder->position > encoder->max_pos) {
+                if (encoder->wrap_around) {
+                    encoder->position = encoder->min_pos;
+                } else {
+                    encoder->position = encoder->max_pos;
+                }
+            } else if (encoder->position < encoder->min_pos) {
+                if (encoder->wrap_around) {
+                    encoder->position = encoder->max_pos;
+                } else {
+                    encoder->position = encoder->min_pos;
+                }
             }
         }
         
@@ -94,11 +103,8 @@ static void gpio_callback(uint gpio, uint32_t events) {
     
     // Handle encoder rotation
     if (gpio == encoder->config.pin_a || gpio == encoder->config.pin_b) {
-        // Debounce
-        if ((now - encoder->last_change_us) < encoder->config.debounce_us) {
-            return;
-        }
-        encoder->last_change_us = now;
+        // Skip debounce for encoder rotation - quadrature signals are clean
+        // and we need maximum responsiveness for fast rotation
         
         // Read current state
         bool a = gpio_get(encoder->config.pin_a);
@@ -284,12 +290,13 @@ hw_result_t encoder_ec11_enable_interrupts(encoder_ec11_t *encoder) {
     if (!encoder) return HW_INVALID_PARAM;
     
     // Enable interrupts on both edges for encoder pins
+    // Both pins need to trigger the callback to catch all state transitions
     gpio_set_irq_enabled_with_callback(encoder->config.pin_a, 
                                        GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, 
                                        true, gpio_callback);
-    gpio_set_irq_enabled(encoder->config.pin_b, 
-                         GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, 
-                         true);
+    gpio_set_irq_enabled_with_callback(encoder->config.pin_b, 
+                                       GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, 
+                                       true, gpio_callback);
     
     // Enable button interrupt if used
     if (encoder->config.pin_button != (uint)-1) {
