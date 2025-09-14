@@ -1,47 +1,162 @@
-# clangd language server cache
-.cache/
-
-# Build directories
-/build/
-/build-*/
-
-# CMake
-CMakeFiles/
-CMakeCache.txt
-cmake_install.cmake
-compile_commands.json
-*.cmake
-
-# Ninja
-.ninja_deps
-.ninja_log
-rules.ninja
-
-# Executables / Binaries
-*.elf
-*.bin
-*.uf2
-*.hex
-*.map
-
-# Object files
-*.o
-*.obj
-*.a
-*.so
-*.dylib
-
-# Generated headers from PIO
-*.pio.h
-
-# Logs
-*.log
-
 # macOS
 .DS_Store
 .AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
 .Spotlight-V100
+.TemporaryItems
 .Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
 
+# Editor directories and files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.settings/
+*.sublime-project
+*.sublime-workspace
 
-.idea/*
+# CMake
+build/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+Makefile
+
+# Build outputs
+*.hex
+*.bin
+*.uf2
+*.elf
+*.dis
+*.map
+*.a
+*.o
+*.d
+
+# Pico SDK
+pico_sdk_import.cmake.bak
+generated/
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Documentation build
+docs/_build/
+docs/.doctrees
+doxygen/
+
+# Logs
+*.log
+*.out
+*.err
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+tmp/
+temp/
+
+# IDE specific
+# CLion
+.idea/
+cmake-build-*/
+
+# Eclipse
+.cproject
+.project
+.settings/
+
+# NetBeans
+nbproject/
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# Visual Studio
+.vs/
+*.vcxproj*
+*.sln
+
+# KDevelop
+*.kdev4
+.kdev4/
+
+# Vim
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+Session.vim
+tags
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Backup files
+*.orig
+*.bak
+*.backup
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Archive files (usually not needed in source control)
+*.zip
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# Specific to this project
+# Ignore build outputs but track the source
+/build/*
+!/build/.gitkeep
+/cmake-build-*/*
+!/cmake-build-*/.gitkeep

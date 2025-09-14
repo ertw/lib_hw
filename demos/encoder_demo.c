@@ -279,7 +279,7 @@ int main() {
     
     // Initialize OLED display
     sh1106_t display;
-    if (!sh1106_init(&display, i2c1, OLED_ADDR, OLED_SDA_PIN, OLED_SCL_PIN)) {
+    if (sh1106_init(&display, i2c1, OLED_ADDR, OLED_SDA_PIN, OLED_SCL_PIN) != HW_OK) {
         printf("Failed to initialize OLED display!\n");
         while (1) {
             tight_loop_contents();

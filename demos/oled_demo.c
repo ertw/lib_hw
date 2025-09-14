@@ -115,7 +115,7 @@ int main() {
     sh1106_t display;
     
     // Initialize the display with i2c1 and correct address
-    if (!sh1106_init(&display, I2C_PORT, OLED_ADDR, I2C_SDA_PIN, I2C_SCL_PIN)) {
+    if (sh1106_init(&display, I2C_PORT, OLED_ADDR, I2C_SDA_PIN, I2C_SCL_PIN) != HW_OK) {
         printf("Failed to initialize OLED display!\n");
         printf("Check connections:\n");
         printf("  VCC -> 5V (VBUS Pin 40)\n");

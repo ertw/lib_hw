@@ -50,6 +50,11 @@
 #define SH1106_CTRL_CMD_STREAM  0x00
 #define SH1106_CTRL_DATA_STREAM 0x40
 
+// I2C Communication constants
+#define SH1106_I2C_TIMEOUT_US   10000   // 10ms timeout for I2C operations
+#define SH1106_I2C_RETRY_COUNT  3       // Number of retries for I2C operations
+#define SH1106_I2C_FREQ         400000  // Default I2C frequency (400kHz)
+
 // SH1106 structure
 typedef struct {
     i2c_inst_t *i2c;
@@ -58,14 +63,14 @@ typedef struct {
 } sh1106_t;
 
 // Function prototypes
-bool sh1106_init(sh1106_t *display, i2c_inst_t *i2c, uint8_t addr, uint8_t sda_pin, uint8_t scl_pin);
-void sh1106_command(sh1106_t *display, uint8_t cmd);
-void sh1106_display_on(sh1106_t *display, bool on);
-void sh1106_set_contrast(sh1106_t *display, uint8_t contrast);
-void sh1106_entire_display(sh1106_t *display, bool on);
-void sh1106_invert(sh1106_t *display, bool invert);
+hw_result_t sh1106_init(sh1106_t *display, i2c_inst_t *i2c, uint8_t addr, uint8_t sda_pin, uint8_t scl_pin);
+hw_result_t sh1106_command(sh1106_t *display, uint8_t cmd);
+hw_result_t sh1106_display_on(sh1106_t *display, bool on);
+hw_result_t sh1106_set_contrast(sh1106_t *display, uint8_t contrast);
+hw_result_t sh1106_entire_display(sh1106_t *display, bool on);
+hw_result_t sh1106_invert(sh1106_t *display, bool invert);
 void sh1106_clear(sh1106_t *display);
-void sh1106_update(sh1106_t *display);
+hw_result_t sh1106_update(sh1106_t *display);
 void sh1106_set_pixel(sh1106_t *display, uint8_t x, uint8_t y, bool on);
 void sh1106_draw_line(sh1106_t *display, uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1, bool on);
 void sh1106_draw_rect(sh1106_t *display, uint8_t x, uint8_t y, uint8_t w, uint8_t h, bool fill);

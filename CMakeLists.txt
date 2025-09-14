@@ -13,6 +13,7 @@ pico_sdk_init()
 
 # Create a static library with all the hardware drivers
 add_library(pico_hw_lib STATIC
+    lib/button/button.c
     lib/oled/sh1106.c
     lib/stepper/stepper_28byj48.c
     lib/encoder/encoder_ec11.c
@@ -36,7 +37,7 @@ target_link_libraries(pico_hw_lib PUBLIC
 # =============================================================================
 
 # Stepper Motor Demo
-add_executable(steppydemo src/main.c)
+add_executable(steppydemo demos/stepper_demo.c)
 pico_enable_stdio_usb(steppydemo 1)
 pico_enable_stdio_uart(steppydemo 0)
 target_link_libraries(steppydemo 
@@ -45,7 +46,7 @@ target_link_libraries(steppydemo
 pico_add_extra_outputs(steppydemo)
 
 # OLED Demo
-add_executable(oled_demo src/oled_demo.c)
+add_executable(oled_demo demos/oled_demo.c)
 pico_enable_stdio_usb(oled_demo 1)
 pico_enable_stdio_uart(oled_demo 0)
 target_link_libraries(oled_demo 
@@ -54,7 +55,7 @@ target_link_libraries(oled_demo
 pico_add_extra_outputs(oled_demo)
 
 # Rotary Encoder Demo with OLED display
-add_executable(encoder_demo src/encoder_demo.c)
+add_executable(encoder_demo demos/encoder_demo.c)
 pico_enable_stdio_usb(encoder_demo 1)
 pico_enable_stdio_uart(encoder_demo 0)
 target_link_libraries(encoder_demo 

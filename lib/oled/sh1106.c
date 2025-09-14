@@ -103,20 +103,21 @@ static const uint8_t font5x7[][5] = {
 };
 
 // Send command to display
-void sh1106_command(sh1106_t *display, uint8_t cmd) {
+hw_result_t sh1106_command(sh1106_t *display, uint8_t cmd) {
     // Use 0x00 control byte - confirmed working with your display
     uint8_t data[2] = {0x00, cmd};
-    i2c_write_blocking(display->i2c, display->addr, data, 2, false);
+    int ret = i2c_write_timeout_us(display->i2c, display->addr, data, 2, false, SH1106_I2C_TIMEOUT_US);
+    return (ret == 2) ? HW_OK : HW_ERROR;
 }
 
 // Initialize the display
-bool sh1106_init(sh1106_t *display, i2c_inst_t *i2c, uint8_t addr, uint8_t sda_pin, uint8_t scl_pin) {
+hw_result_t sh1106_init(sh1106_t *display, i2c_inst_t *i2c, uint8_t addr, uint8_t sda_pin, uint8_t scl_pin) {
     // Store configuration
     display->i2c = i2c;
     display->addr = addr;
     
-    // Initialize I2C (use 100 kHz for maximum compatibility with 5V modules)
-    i2c_init(i2c, 100 * 1000);  // 100 kHz
+    // Initialize I2C
+    i2c_init(i2c, SH1106_I2C_FREQ);
     gpio_set_function(sda_pin, GPIO_FUNC_I2C);
     gpio_set_function(scl_pin, GPIO_FUNC_I2C);
     gpio_pull_up(sda_pin);
@@ -126,9 +127,9 @@ bool sh1106_init(sh1106_t *display, i2c_inst_t *i2c, uint8_t addr, uint8_t sda_p
     sleep_ms(100);
     
     // Check if device is present using write (not read which hangs)
-    int ret = i2c_write_timeout_us(i2c, addr, NULL, 0, false, 1000);
+    int ret = i2c_write_timeout_us(i2c, addr, NULL, 0, false, SH1106_I2C_TIMEOUT_US);
     if (ret < 0) {
-        return false;  // Device not found
+        return HW_NOT_FOUND;  // Device not found
     }
     
     // Initialize display with correct command sequence
@@ -204,28 +205,29 @@ bool sh1106_init(sh1106_t *display, i2c_inst_t *i2c, uint8_t addr, uint8_t sda_p
     uint8_t cmd_on[2] = {0x00, 0xAF};
     i2c_write_blocking(display->i2c, display->addr, cmd_on, 2, false);
     
-    return true;
+    return HW_OK;
 }
 
 // Turn display on or off
-void sh1106_display_on(sh1106_t *display, bool on) {
-    sh1106_command(display, on ? SH1106_CMD_DISPLAY_ON : SH1106_CMD_DISPLAY_OFF);
+hw_result_t sh1106_display_on(sh1106_t *display, bool on) {
+    return sh1106_command(display, on ? SH1106_CMD_DISPLAY_ON : SH1106_CMD_DISPLAY_OFF);
 }
 
 // Entire display on/off (test pattern)
-void sh1106_entire_display(sh1106_t *display, bool on) {
-    sh1106_command(display, on ? SH1106_CMD_ENTIRE_DISPLAY_ON : SH1106_CMD_RESUME_FROM_RAM);
+hw_result_t sh1106_entire_display(sh1106_t *display, bool on) {
+    return sh1106_command(display, on ? SH1106_CMD_ENTIRE_DISPLAY_ON : SH1106_CMD_RESUME_FROM_RAM);
 }
 
 // Invert display
-void sh1106_invert(sh1106_t *display, bool invert) {
-    sh1106_command(display, invert ? SH1106_CMD_SET_INVERT_DISPLAY : SH1106_CMD_SET_NORMAL_DISPLAY);
+hw_result_t sh1106_invert(sh1106_t *display, bool invert) {
+    return sh1106_command(display, invert ? SH1106_CMD_SET_INVERT_DISPLAY : SH1106_CMD_SET_NORMAL_DISPLAY);
 }
 
 // Set display contrast
-void sh1106_set_contrast(sh1106_t *display, uint8_t contrast) {
-    sh1106_command(display, SH1106_CMD_SET_CONTRAST);
-    sh1106_command(display, contrast);
+hw_result_t sh1106_set_contrast(sh1106_t *display, uint8_t contrast) {
+    hw_result_t ret = sh1106_command(display, SH1106_CMD_SET_CONTRAST);
+    if (ret != HW_OK) return ret;
+    return sh1106_command(display, contrast);
 }
 
 // Clear the display buffer
@@ -234,25 +236,36 @@ void sh1106_clear(sh1106_t *display) {
 }
 
 // Update the display with buffer contents (chunked writes for compatibility)
-void sh1106_update(sh1106_t *display) {
+hw_result_t sh1106_update(sh1106_t *display) {
     for (uint8_t page = 0; page < SH1106_PAGES; page++) {
         // Set page address
-        sh1106_command(display, SH1106_CMD_SET_PAGE_ADDR | page);
+        if (sh1106_command(display, SH1106_CMD_SET_PAGE_ADDR | page) != HW_OK) {
+            return HW_ERROR;
+        }
 
         // Set column start based on offset (many SH1106 modules use 2)
-        sh1106_command(display, SH1106_CMD_SET_COLUMN_ADDR_HIGH | ((SH1106_COL_OFFSET >> 4) & 0x0F));
-        sh1106_command(display, SH1106_CMD_SET_COLUMN_ADDR_LOW | (SH1106_COL_OFFSET & 0x0F));
+        if (sh1106_command(display, SH1106_CMD_SET_COLUMN_ADDR_HIGH | ((SH1106_COL_OFFSET >> 4) & 0x0F)) != HW_OK) {
+            return HW_ERROR;
+        }
+        if (sh1106_command(display, SH1106_CMD_SET_COLUMN_ADDR_LOW | (SH1106_COL_OFFSET & 0x0F)) != HW_OK) {
+            return HW_ERROR;
+        }
 
         // Write page data in small chunks (16 bytes)
         const uint8_t chunk = 16;
         for (uint8_t x = 0; x < SH1106_WIDTH; x += chunk) {
             uint8_t len = (x + chunk <= SH1106_WIDTH) ? chunk : (SH1106_WIDTH - x);
             uint8_t data[1 + 16];
-            data[0] = 0x40;  // Data control byte (0x40 works for your display)
+            data[0] = SH1106_CTRL_DATA_STREAM;  // Data control byte
             memcpy(&data[1], &display->buffer[page * SH1106_WIDTH + x], len);
-            i2c_write_blocking(display->i2c, display->addr, data, 1 + len, false);
+            
+            int ret = i2c_write_timeout_us(display->i2c, display->addr, data, 1 + len, false, SH1106_I2C_TIMEOUT_US);
+            if (ret != (1 + len)) {
+                return HW_ERROR;
+            }
         }
     }
+    return HW_OK;
 }
 
 // Set a pixel in the buffer

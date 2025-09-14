@@ -186,6 +186,7 @@ static inline hw_result_t hw_i2c_scan(i2c_inst_t *i2c, uint8_t *found_addrs, uin
 // =============================================================================
 
 // Include individual peripheral driver headers
+#include "button/button.h"
 #include "oled/sh1106.h"
 #include "stepper/stepper_28byj48.h"
 #include "encoder/encoder_ec11.h"

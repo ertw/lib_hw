@@ -59,10 +59,10 @@ static void update_position(encoder_ec11_t *encoder, encoder_state_t new_state) 
         
         encoder->position += delta;
         
-        // Debug output (remove in production)
+        // Debug output
         #ifdef ENCODER_DEBUG
-        printf("Encoder: %d->%d, delta=%d, pos=%ld\n", 
-               encoder->state, new_state, delta, encoder->position);
+        DEBUG_PRINT("Encoder: %d->%d, delta=%d, pos=%ld", 
+                    encoder->state, new_state, delta, encoder->position);
         #endif
         
         // Apply limits if set (max_pos of 0 means no limits)
