@@ -33,7 +33,7 @@ hw_result_t hw_ws2812_init(hw_ws2812_t *ws, const hw_ws2812_config_t *config) {
 
     // Initialize PIO program
     uint offset = pio_add_program(config->pio, &ws2812_program);
-    ws2812_program_init(config->pio, config->sm, offset, config->data_pin, 800000, false);
+    ws2812_program_init(config->pio, config->sm, offset, config->data_pin, 800000);
 
     // Store config and mark as initialized
     ws->config = config;
