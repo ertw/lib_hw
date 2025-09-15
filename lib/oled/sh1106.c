@@ -1,4 +1,4 @@
-#include "sh1106.h"
+#include "../lib.h"
 #include <string.h>
 #include <stdlib.h>
 

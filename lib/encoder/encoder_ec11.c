@@ -3,7 +3,7 @@
  * @brief Implementation of EC11 rotary encoder driver
  */
 
-#include "encoder_ec11.h"
+#include "../lib.h"
 #include "hardware/irq.h"
 
 // =============================================================================

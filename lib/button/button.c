@@ -3,7 +3,7 @@
  * @brief Implementation of button driver with debouncing
  */
 
-#include "button.h"
+#include "../lib.h"
 #include "hardware/irq.h"
 
 // =============================================================================

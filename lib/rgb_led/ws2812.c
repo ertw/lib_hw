@@ -1,4 +1,4 @@
-#include "ws2812.h"
+#include "../lib.h"
 #include "ws2812.pio.h"
 #include <stdlib.h>
 #include <string.h>
