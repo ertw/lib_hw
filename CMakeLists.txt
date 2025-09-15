@@ -17,6 +17,7 @@ add_library(pico_hw_lib STATIC
     lib/oled/sh1106.c
     lib/stepper/stepper_28byj48.c
     lib/encoder/encoder_ec11.c
+    lib/rgb_led/ws2812.c
 )
 
 # Include directories for the library
@@ -24,12 +25,16 @@ target_include_directories(pico_hw_lib PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/lib
 )
 
+# Generate PIO headers from .pio files
+pico_generate_pio_header(pico_hw_lib ${CMAKE_CURRENT_LIST_DIR}/lib/rgb_led/ws2812.pio)
+
 # Link the library with required Pico SDK libraries
 target_link_libraries(pico_hw_lib PUBLIC
     pico_stdlib
     hardware_i2c
     hardware_gpio
     hardware_irq
+    hardware_pio
 )
 
 # =============================================================================
@@ -62,3 +67,12 @@ target_link_libraries(encoder_demo
     pico_hw_lib
 )
 pico_add_extra_outputs(encoder_demo)
+
+# RGB LED Demo
+add_executable(rgb_led_demo demos/rgb_led_demo.c)
+pico_enable_stdio_usb(rgb_led_demo 1)
+pico_enable_stdio_uart(rgb_led_demo 0)
+target_link_libraries(rgb_led_demo 
+    pico_hw_lib
+)
+pico_add_extra_outputs(rgb_led_demo)
