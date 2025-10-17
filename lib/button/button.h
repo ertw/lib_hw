@@ -3,13 +3,23 @@
  * @brief Driver for simple push buttons with debouncing
  * 
  * This driver provides interrupt-driven and polled button reading with
- * software debouncing, multi-click detection, and long-press support.
+ * software debouncing, optional multi-click detection, and optional long-press support.
+ * 
+ * Features can be enabled/disabled:
+ * - Single click only (default): Minimal latency, fires immediately on release
+ * - Multi-click detection: Enable to detect double/triple clicks (adds delay)
+ * - Long press detection: Enable to detect long button holds
+ * 
+ * Callbacks are ALWAYS called from button_poll() context, never from interrupts,
+ * so they are safe to perform complex operations.
  */
 
 #ifndef BUTTON_H
 #define BUTTON_H
 
-#include "../lib.h"
+#include <stdint.h>
+#include <stdbool.h>
+#include "pico/types.h"
 
 // =============================================================================
 // Configuration
@@ -58,6 +68,8 @@ typedef struct {
     uint32_t debounce_ms;       ///< Debounce time in milliseconds
     uint32_t long_press_ms;     ///< Long press threshold in milliseconds
     uint32_t multi_click_ms;    ///< Multi-click timeout in milliseconds
+    bool enable_long_press;     ///< Enable long-press detection (default: false)
+    bool enable_multi_click;    ///< Enable multi-click (double/triple) detection (default: false)
 } button_config_t;
 
 /** Button instance */
@@ -78,8 +90,12 @@ typedef struct {
     uint64_t press_start_time;  ///< Time when button was pressed
     bool long_press_fired;      ///< Long press event already fired
     
-    // Event callback
+    // Event callback (called from button_poll() context, NOT interrupt context)
     void (*event_callback)(button_event_t event, uint8_t click_count); ///< Optional event callback
+
+    // Pending event (used when multi-click is disabled to emit immediately)
+    button_event_t pending_event;   ///< Pending event to return from poll
+    uint8_t pending_clicks;         ///< Pending click count for the event
 } button_t;
 
 // =============================================================================
@@ -89,8 +105,8 @@ typedef struct {
 /**
  * Initialize button
  * @param button Pointer to button instance
- * @param config Pointer to configuration
- * @return HW_OK on success, error code otherwise
+ * @param config Pointer to configuration (set enable_multi_click/enable_long_press for features)
+ * @return HW_OK on success, HW_ERROR if max buttons reached, HW_INVALID_PARAM if invalid config
  */
 hw_result_t button_init(button_t *button, const button_config_t *config);
 
@@ -136,6 +152,8 @@ void button_reset(button_t *button);
 
 /**
  * Set event callback function
+ * Note: Callbacks are called from button_poll() context, NOT interrupt context,
+ * so they are safe to perform complex operations like I2C, SPI, printf, etc.
  * @param button Pointer to button instance
  * @param callback Callback function (NULL to disable)
  */

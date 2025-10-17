@@ -3,8 +3,9 @@
  * @brief Implementation of EC11 rotary encoder driver
  */
 
-#include "encoder_ec11.h"
+#include "../lib.h"
 #include "hardware/irq.h"
+#include "hardware/sync.h"
 
 // =============================================================================
 // Private Variables
@@ -194,8 +195,10 @@ hw_result_t encoder_ec11_init(encoder_ec11_t *encoder, const encoder_config_t *c
     bool b = gpio_get(config->pin_b);
     encoder->state = (a << 1) | b;
     
-    // Store instance for ISR access
+    // Store instance for ISR access (with critical section for thread safety)
+    uint32_t save = save_and_disable_interrupts();
     encoder_instances[num_encoders++] = encoder;
+    restore_interrupts(save);
     
     return HW_OK;
 }
@@ -206,7 +209,8 @@ void encoder_ec11_deinit(encoder_ec11_t *encoder) {
     // Disable interrupts
     encoder_ec11_disable_interrupts(encoder);
     
-    // Remove from instances
+    // Remove from instances (with critical section for thread safety)
+    uint32_t save = save_and_disable_interrupts();
     for (int i = 0; i < num_encoders; i++) {
         if (encoder_instances[i] == encoder) {
             // Shift remaining instances
@@ -217,6 +221,7 @@ void encoder_ec11_deinit(encoder_ec11_t *encoder) {
             break;
         }
     }
+    restore_interrupts(save);
 }
 
 int32_t encoder_ec11_get_position(encoder_ec11_t *encoder) {
@@ -261,8 +266,9 @@ encoder_event_t encoder_ec11_poll(encoder_ec11_t *encoder) {
     // Check for rotation
     int32_t current_pos = encoder->position;
     if (current_pos != last_position) {
+        int32_t delta = current_pos - last_position;
         last_position = current_pos;
-        return (current_pos > last_position) ? ENCODER_EVENT_CW : ENCODER_EVENT_CCW;
+        return (delta > 0) ? ENCODER_EVENT_CW : ENCODER_EVENT_CCW;
     }
     
     // Check for button

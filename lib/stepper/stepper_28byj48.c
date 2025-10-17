@@ -3,7 +3,7 @@
  * @brief Implementation of 28BYJ-48 stepper motor driver
  */
 
-#include "stepper_28byj48.h"
+#include "../lib.h"
 
 // =============================================================================
 // Private Functions

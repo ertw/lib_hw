@@ -3,8 +3,10 @@
  * @brief Implementation of button driver with debouncing
  */
 
-#include "button.h"
+#include "../lib.h"
 #include "hardware/irq.h"
+#include "hardware/gpio.h"
+#include "hardware/sync.h"
 
 // =============================================================================
 // Private Variables
@@ -41,6 +43,8 @@ static bool read_button_state(button_t *button) {
 
 /**
  * Process button state change
+ * Note: This is called from button_poll() in normal context, NOT from interrupt!
+ * Callbacks fired here are safe to do complex operations.
  */
 static void process_state_change(button_t *button, bool new_state, uint64_t now) {
     button->debounced_state = new_state;
@@ -58,13 +62,23 @@ static void process_state_change(button_t *button, bool new_state, uint64_t now)
         
         // Check if this was a normal click (not long press)
         uint64_t press_duration = now - button->press_start_time;
-        if (press_duration < MS_TO_US(button->config.long_press_ms)) {
-            // Increment click count
-            button->click_count++;
-            button->last_click_time = now;
-            
-            // Don't fire click events yet - wait for multi-click timeout
-            // This will be handled in the poll function
+        // Only check long press timing if long press is enabled or if we need to distinguish for multi-click
+        bool is_short_press = true;
+        if (button->config.enable_long_press || button->config.enable_multi_click) {
+            is_short_press = press_duration < MS_TO_US(button->config.long_press_ms);
+        }
+        
+        if (is_short_press && !button->long_press_fired) {
+            // If multi-click is disabled, emit CLICK immediately
+            if (!button->config.enable_multi_click) {
+                button->pending_event = BUTTON_EVENT_CLICK;
+                button->pending_clicks = 1;
+                button->click_count = 0;
+            } else {
+                // Increment click count and wait for timeout to decide single/double/triple
+                button->click_count++;
+                button->last_click_time = now;
+            }
         }
         
         if (button->event_callback) {
@@ -77,7 +91,7 @@ static void process_state_change(button_t *button, bool new_state, uint64_t now)
  * Check for long press
  */
 static void check_long_press(button_t *button, uint64_t now) {
-    if (button->state == BUTTON_STATE_PRESSED && !button->long_press_fired) {
+    if (button->state == BUTTON_STATE_PRESSED && !button->long_press_fired && button->config.enable_long_press) {
         uint64_t press_duration = now - button->press_start_time;
         if (press_duration >= MS_TO_US(button->config.long_press_ms)) {
             button->long_press_fired = true;
@@ -95,6 +109,9 @@ static void check_long_press(button_t *button, uint64_t now) {
  * Check for completed click sequence
  */
 static button_event_t check_click_sequence(button_t *button, uint64_t now) {
+    if (!button->config.enable_multi_click) {
+        return BUTTON_EVENT_NONE;
+    }
     if (button->click_count > 0 && button->state == BUTTON_STATE_IDLE) {
         uint64_t time_since_click = now - button->last_click_time;
         if (time_since_click >= MS_TO_US(button->config.multi_click_ms)) {
@@ -133,14 +150,18 @@ static button_event_t check_click_sequence(button_t *button, uint64_t now) {
 
 /**
  * GPIO interrupt handler
+ * Note: This runs in interrupt context - keep it minimal!
+ * Only updates raw state; actual processing happens in button_poll()
  */
 static void gpio_callback(uint gpio, uint32_t events) {
     button_t *button = find_button_by_pin(gpio);
     if (!button) return;
     
-    // Update raw state
+    // Update raw state and timestamp atomically
+    uint32_t save = save_and_disable_interrupts();
     button->raw_state = read_button_state(button);
     button->state_change_time = hw_time_us();
+    restore_interrupts(save);
 }
 
 // =============================================================================
@@ -153,7 +174,14 @@ hw_result_t button_init(button_t *button, const button_config_t *config) {
     }
     
     if (num_buttons >= MAX_BUTTONS) {
+        DEBUG_PRINT("Button init failed: max buttons (%d) reached", MAX_BUTTONS);
         return HW_ERROR;
+    }
+    
+    // Validate GPIO pin number (Pico has 30 GPIOs: 0-29)
+    if (config->pin >= 30) {
+        DEBUG_PRINT("Button init failed: invalid pin %u", config->pin);
+        return HW_INVALID_PARAM;
     }
     
     // Copy configuration
@@ -169,7 +197,7 @@ hw_result_t button_init(button_t *button, const button_config_t *config) {
     if (button->config.multi_click_ms == 0) {
         button->config.multi_click_ms = BUTTON_DEFAULT_MULTI_CLICK_MS;
     }
-    
+
     // Initialize GPIO
     if (config->pull_up) {
         hw_gpio_init_input_pullup(config->pin);
@@ -187,9 +215,13 @@ hw_result_t button_init(button_t *button, const button_config_t *config) {
     button->press_start_time = 0;
     button->long_press_fired = false;
     button->event_callback = NULL;
+    button->pending_event = BUTTON_EVENT_NONE;
+    button->pending_clicks = 0;
     
-    // Store instance for ISR access
+    // Store instance for ISR access (with critical section for thread safety)
+    uint32_t save = save_and_disable_interrupts();
     button_instances[num_buttons++] = button;
+    restore_interrupts(save);
     
     return HW_OK;
 }
@@ -200,7 +232,8 @@ void button_deinit(button_t *button) {
     // Disable interrupts
     button_disable_interrupts(button);
     
-    // Remove from instances
+    // Remove from instances (with critical section for thread safety)
+    uint32_t save = save_and_disable_interrupts();
     for (int i = 0; i < num_buttons; i++) {
         if (button_instances[i] == button) {
             // Shift remaining instances
@@ -211,17 +244,35 @@ void button_deinit(button_t *button) {
             break;
         }
     }
+    restore_interrupts(save);
 }
 
 button_event_t button_poll(button_t *button) {
     if (!button) return BUTTON_EVENT_NONE;
     
     uint64_t now = hw_time_us();
+    
+    // Read raw state with interrupts disabled to ensure consistency
+    uint32_t save = save_and_disable_interrupts();
     bool current_raw = button->raw_state;
+    uint64_t state_change_time = button->state_change_time;
+    restore_interrupts(save);
+    
     button_event_t event = BUTTON_EVENT_NONE;
     
+    // If we have a pending event (e.g., immediate CLICK), return it once
+    if (button->pending_event != BUTTON_EVENT_NONE) {
+        event = button->pending_event;
+        if (button->event_callback) {
+            button->event_callback(event, button->pending_clicks);
+        }
+        button->pending_event = BUTTON_EVENT_NONE;
+        button->pending_clicks = 0;
+        return event;
+    }
+
     // Check if debounce period has elapsed
-    uint64_t time_since_change = now - button->state_change_time;
+    uint64_t time_since_change = now - state_change_time;
     if (time_since_change >= MS_TO_US(button->config.debounce_ms)) {
         // Check if state has changed
         if (current_raw != button->debounced_state) {
@@ -265,6 +316,8 @@ void button_reset(button_t *button) {
     button->click_count = 0;
     button->last_click_time = 0;
     button->long_press_fired = false;
+    button->pending_event = BUTTON_EVENT_NONE;
+    button->pending_clicks = 0;
     button->state = button->debounced_state ? BUTTON_STATE_PRESSED : BUTTON_STATE_IDLE;
 }
 
@@ -277,6 +330,10 @@ void button_set_callback(button_t *button,
 
 hw_result_t button_enable_interrupts(button_t *button) {
     if (!button) return HW_INVALID_PARAM;
+    
+    // Ensure initial state is synchronized before enabling interrupts
+    button->raw_state = read_button_state(button);
+    button->state_change_time = hw_time_us();
     
     // Enable interrupts on both edges
     gpio_set_irq_enabled_with_callback(button->config.pin, 

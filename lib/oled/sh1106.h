@@ -1,8 +1,6 @@
 #ifndef SH1106_H
 #define SH1106_H
 
-#include "../lib.h"
-
 // Display dimensions
 #define SH1106_WIDTH 128
 #define SH1106_HEIGHT 64
